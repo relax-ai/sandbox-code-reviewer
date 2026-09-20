@@ -1,0 +1,53 @@
+# Provisions a Relax sandbox, runs the relaxAI PR-review agent inside it,
+# streams the agent output into this workflow, then destroys the sandbox.
+# Triggers on push to main or manually via the GitHub Actions UI.
+#
+# Required repo secrets:
+#   RELAX_API_KEY     Relax API key (rak_...), used for the sandbox API + model
+#   AGENT_GH_TOKEN    GitHub PAT with pull-requests write on the target repo
+# Required repo variables (Settings -> Variables):
+#   AGENT_GH_REPO     target repo, owner/repo
+#   AGENT_DRY_RUN     1 = print the review, 0 = post it (default 1)
+#   RELAX_ENDPOINT    optional, defaults to api.beta.relax.ai
+name: run-agent
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    env:
+      RELAX_ENDPOINT: ${{ vars.RELAX_ENDPOINT || 'api.beta.relax.ai' }}
+      RELAX_API_KEY: ${{ secrets.RELAX_API_KEY }}
+      AGENT_GH_TOKEN: ${{ secrets.AGENT_GH_TOKEN }}
+      AGENT_GH_REPO: ${{ vars.AGENT_GH_REPO }}
+      AGENT_DRY_RUN: ${{ vars.AGENT_DRY_RUN || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write .env
+        run: |
+          {
+            echo "endpoint=${RELAX_ENDPOINT}"
+            echo "api_key=${RELAX_API_KEY}"
+            echo "github_token=${AGENT_GH_TOKEN}"
+            echo "target_repo=${AGENT_GH_REPO}"
+            echo "dry_run=${AGENT_DRY_RUN}"
+          } > .env
+
+      - name: Deploy sandbox
+        run: ./deploy.sh
+
+      - name: Verify toolchain and model access
+        run: ./deploy.sh verify
+
+      - name: Run review
+        timeout-minutes: 12
+        run: ./deploy.sh run
+
+      - name: Destroy sandbox
+        if: always()
+        run: ./destroy.sh || true

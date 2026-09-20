@@ -1,0 +1,22 @@
+# Secrets / runtime state (keep the demo)
+.env
+.sandbox-id
+
+# Agent tooling
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Terraform state/vars can contain rendered secrets — never commit these
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
