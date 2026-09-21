@@ -75,23 +75,30 @@ it prints the HTTP status and the error, and exits non-zero.
 ./deploy.sh run
 ```
 
-Under the hood, this starts **Claude Code** *inside the sandbox* in
-non-interactive mode (`claude --print`) and hands it the instructions in
-`prompt.txt`. The agent then works through those instructions:
+Concretely, `deploy.sh` sends **one command** into the sandbox:
 
-1. runs the GitHub CLI (`gh`) to list the **open pull requests** in `target_repo`;
-2. fetches each PR's **diff** and reads it;
-3. writes a review for each PR to `/workspace/review-PR-<number>.md` — a summary,
+```
+claude --print -p "$(cat /workspace/prompt.txt)"
+```
+
+That runs a **Claude Code** session (connected to the relaxAI API) as a normal process *inside the sandbox*, with shell access and your
+GitHub token in its environment. It's given the instructions from `prompt.txt` (at root of this repo) and nothing else, and works through them start-to-finish without asking for confirmation (`--print` means non-interactive):
+
+1. `gh pr list` → the **open pull requests** in `target_repo`;
+2. `gh pr diff <n>` → each PR's **diff**, which it reads and reasons about;
+3. it writes a review per PR to `/workspace/review-PR-<number>.md` — summary,
    correctness/style notes, and a verdict;
-4. delivers it: with `dry_run=1` it just prints the review; with `dry_run=0` it
-   posts the file as a comment on the PR (`gh pr comment --body-file`).
+4. it delivers that file: prints it when `dry_run=1`, or posts it as a comment
+   on the PR (`gh pr comment --body-file`) when `dry_run=0` (Step 5)
 
-All of that happens inside the sandbox, with your GitHub token injected as
-`GH_TOKEN` and the model calls going out to the Relax API over `$endpoint` — your
-laptop only starts the session and prints the result.
+The model calls go out to the relaxAI API over `$endpoint`. Everything else — the
+`gh` commands, the file writes — happens inside the sandbox; your laptop only
+starts the process and prints what it produced. 
 
-`deploy.sh` waits for it to finish (5-minute cap, showing a `waiting` heartbeat),
-then prints the outcome once: the tally plus the review file(s) the agent wrote.
+The key: **Nothing runs on your laptop**
+
+`deploy.sh` waits for that process to exit (5-minute cap, with a `waiting`
+heartbeat), then prints the outcome once: the tally plus the review file(s).
 
 ---
 
@@ -102,6 +109,7 @@ Edit `.env`:
 ```
 dry_run=0
 ```
+Which means the agent will go ahead and upload its report to the PR.
 
 `dry_run`, the model, and `target_repo` are applied when the session runs, so
 there's no need to re-deploy — just:
@@ -137,11 +145,12 @@ verdict.
 
 ## What just happened
 
-- A relaxAI agent session ran against the Relax API, in a sandbox it doesn't
+- A relaxAI agent session ran against the relaxAI API, in a sandbox it doesn't
   host.
 - It reviewed **untrusted code** inside a contained sandbox, egress limited to
   GitHub, package registries, and the model.
 - The whole machine disappeared with **one command**.
+- Nothing ran on your local machine
 
 ---
 
