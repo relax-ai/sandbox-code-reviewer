@@ -10,12 +10,17 @@ restricted, so the code under review can't reach anything it shouldn't.
 
 ---
 
-## What you need
+## Prerequisites
 
-- This directory
-- `curl`, `jq`, `git` installed
-- A Relax API key (sandbox API + model)
-- A GitHub token (PAT) with access to the repo you'll review
+Two things to sign up for, plus a repo to review:
+
+| You need | What it's for | Notes |
+|---|---|---|
+| **A Relax API key** | Authenticates the sandbox API **and** is the key the agent uses to call the model | One key does both. Looks like `rak_…` |
+| **A GitHub personal access token (PAT)** | Lets the agent read PR diffs and post review comments | Needs **read and write on pull requests** for the repos you want reviewed. Classic token: the `repo` scope. Fine-grained token: *Contents: read* + *Pull requests: read and write* |
+| **A target repo** | The repository whose open PRs get reviewed | `owner/repo`, e.g. `acme/website`. It should have at least one **open** pull request |
+
+On your machine you also need `curl`, `jq`, and `git`.
 
 ---
 
@@ -29,10 +34,10 @@ Set these in `.env`:
 
 | Key | What it is |
 |---|---|
-| `api_key` | Your Relax key. Used for the sandbox API **and** the model. |
-| `github_token` | GitHub PAT. Needs **pull-requests write** on the repo to comment. |
+| `api_key` | Your Relax key (sandbox API + model). |
+| `github_token` | Your GitHub PAT — needs pull-requests write on the target repo. |
 | `target_repo` | The repo to review, `owner/repo`. |
-| `dry_run` | `1` prints the review instead of posting. Flip to `0` to post live. |
+| `dry_run` | `1` prints the review instead of posting. `0` posts it live. |
 
 Leave the sandbox defaults as-is unless you need a different size or lifetime.
 
@@ -44,9 +49,9 @@ Leave the sandbox defaults as-is unless you need a different size or lifetime.
 ./deploy.sh
 ```
 
-Creates the sandbox, installs the agent toolchain, uploads the prompt, and
-leaves the sandbox running. When it finishes it prints a **Verify** block you
-can copy-paste.
+Creates the sandbox, installs what the agent needs inside it (Node, the GitHub
+CLI, Claude Code), uploads the prompt, and leaves the sandbox running. When it
+finishes it prints a **Verify** block you can copy-paste.
 
 ---
 
@@ -59,7 +64,8 @@ can copy-paste.
 Expect: a Node version, a `gh` version, an agent version, the injected env
 (`ANTHROPIC_BASE_URL`, `TARGET_REPO`, `DRY_RUN`, keys shown as `set`), and a
 short reply from the model. If the model line returns text, the sandbox can
-reach the Relax API and the key works.
+reach the Relax API and your key works. If it can't, the command says so —
+it prints the HTTP status and the error, and exits non-zero.
 
 ---
 
@@ -69,10 +75,10 @@ reach the Relax API and the key works.
 ./deploy.sh run
 ```
 
-This starts the agent session, waits for it to finish (5-minute cap), then
-prints `completion.txt`, the agent's output, and the last review body it wrote
-to `review.md`. In dry-run mode you'll see the tally plus the review it would
-have posted.
+This starts the agent session (5-minute cap) and waits for it to finish,
+printing a `waiting` heartbeat while it works. When it's done the review is
+printed once: the tally plus, for each PR, the review the agent wrote to
+`/workspace/review-PR-<number>.md`. In dry-run mode nothing is posted to GitHub.
 
 ---
 
@@ -84,15 +90,14 @@ Edit `.env`:
 dry_run=0
 ```
 
-Then destroy and re-deploy (env is injected at sandbox creation):
+`dry_run`, the model, and `target_repo` are applied when the session runs, so
+there's no need to re-deploy — just:
 
 ```bash
-./destroy.sh
-./deploy.sh
 ./deploy.sh run
 ```
 
-Now open a pull request — there should be a new comment with the review and a
+Now open the pull request — there should be a new comment with the review and a
 verdict.
 
 ---
@@ -132,6 +137,9 @@ verdict.
 - **`./deploy.sh` fails during install with a network/DNS error** — the
   `limited` allowlist is missing a host. Set `networking_type=unrestricted` in
   `.env` and re-run.
+- **`verify` reports `FAILED (http 404) ... does not exist`** — the model id
+  isn't available on that host. Check `model_id` in `.env` against the models
+  listed by `GET https://$endpoint/v1/models`.
 - **`./deploy.sh run` finishes but prints nothing** — check `./deploy.sh logs`
   and `completion.txt`; the model call usually fails first if the key is wrong.
 - **GitHub returns 403 when commenting** — your PAT needs pull-requests write on

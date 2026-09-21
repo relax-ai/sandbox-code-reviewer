@@ -1,5 +1,5 @@
 #!/bin/bash
-# bootstrap.sh — install the toolchain the PR-review agent needs inside a Relax
+# bootstrap.sh — install what the PR-review agent needs inside a Relax
 # sandbox. Invoked by deploy.sh via the /execute endpoint.
 #
 # The sandbox base image is Ubuntu 22.04 and already ships Node 22, npm, git,

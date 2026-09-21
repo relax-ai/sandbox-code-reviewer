@@ -4,11 +4,11 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 # deploy.sh — run a Claude Code PR-review agent inside a Relax sandbox.
 #
-#   ./deploy.sh            provision the sandbox + toolchain (leaves it running)
+#   ./deploy.sh            provision the sandbox + agent setup (leaves it running)
 #   ./deploy.sh run        run the PR-review session now and print the output
 #   ./deploy.sh logs       print the last Claude Code output
 #   ./deploy.sh status     show sandbox status + last completion record
-#   ./deploy.sh verify     check the toolchain, injected env, and model access
+#   ./deploy.sh verify     check the agent setup, injected env, and model access
 #
 # Deploy flow:
 #   1. Create sandbox (POST /v1/sandboxes) with the agent env injected
@@ -76,7 +76,7 @@ do_deploy() {
   : "${target_repo:?target_repo not set in .env}"
   : "${github_token:?github_token not set in .env}"
 
-  # Auto-delete the sandbox on any early exit; cleared once the toolchain is up.
+  # Auto-delete the sandbox on any early exit; cleared once the agent setup is up.
   trap cleanup_on_failure EXIT
 
   echo "[create] name=${sandbox_name:-relaxai-pr-review} template=${sandbox_template:-cloud-runtime-template} networking=${networking_type:-limited}"
@@ -190,7 +190,7 @@ do_deploy() {
     exit 1
   fi
 
-  # Toolchain is up — do not delete the sandbox on exit.
+  # Agent setup is up — do not delete the sandbox on exit.
   trap - EXIT
   echo "$ID" > "$STATE_FILE"
 
@@ -202,7 +202,7 @@ do_deploy() {
   if [ -n "${sandbox_timeout:-}" ]; then echo "Expires in: $sandbox_timeout (or run ./destroy.sh)"; fi
   echo "Target repo: ${target_repo}   dry_run=${dry_run:-1}"
   echo
-  echo "Verify the toolchain:"
+  echo "Verify the agent setup:"
   echo "  ./deploy.sh verify"
   echo
   echo "Run the review:"
@@ -311,7 +311,7 @@ do_verify() {
   local model="${model_id:-DeepSeek-V4-Pro}"
   local base="${ANTHROPIC_BASE_URL:-https://${endpoint}}"
 
-  echo "--- toolchain (expect node v22, gh, claude) ---"
+  echo "--- agent setup (expect node v22, gh, claude) ---"
   sync_stdout "$(sync_exec 'node --version; gh --version | head -1; claude --version')"
   echo "--- injected env ---"
   sync_stdout "$(sync_exec 'printf "ANTHROPIC_BASE_URL=%s\n" "${ANTHROPIC_BASE_URL:-MISSING}"; printf "CLAUDE_CODE_DEFAULT_MODEL=%s\n" "${CLAUDE_CODE_DEFAULT_MODEL:-MISSING}"; printf "TARGET_REPO=%s\n" "${TARGET_REPO:-MISSING}"; printf "DRY_RUN=%s\n" "${DRY_RUN:-MISSING}"; printf "ANTHROPIC_API_KEY=%s\n" "$([ -n "${ANTHROPIC_API_KEY:-}" ] && echo set || echo MISSING)"; printf "GH_TOKEN=%s\n" "$([ -n "${GH_TOKEN:-}" ] && echo set || echo MISSING)"')"

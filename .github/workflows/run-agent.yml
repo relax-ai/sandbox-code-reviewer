@@ -41,7 +41,7 @@ jobs:
       - name: Deploy sandbox
         run: ./deploy.sh
 
-      - name: Verify toolchain and model access
+      - name: Verify agent setup and model access
         run: ./deploy.sh verify
 
       - name: Run review
