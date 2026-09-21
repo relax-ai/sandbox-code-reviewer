@@ -247,7 +247,7 @@ do_run() {
   inner+="$envprefix timeout --kill-after=10 $t claude --print --dangerously-skip-permissions -p \"\$(cat /workspace/prompt.txt)\" > /workspace/claude-output.log 2>&1; "
   inner+='RC=$?; printf "exit_code=%s\ncompleted_at=%s\n" "$RC" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /workspace/completion.txt'
 
-  echo "[run] running Claude Code session (model $model, timeout ${t}s)…"
+  echo "[run] running relaxAI session (model $model, timeout ${t}s)…"
 
   curl $RETRY --max-time $(( t + 60 )) -fsS -X POST "$BASE/sandboxes/$ID/execute" \
     -H "$AUTH" -H "Content-Type: application/json" \

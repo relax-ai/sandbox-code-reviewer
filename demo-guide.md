@@ -24,6 +24,50 @@ On your machine you also need `curl`, `jq`, and `git`.
 
 ---
 
+## Choose a repo to review
+
+The agent reviews **every open pull request** in `target_repo`, so you need a repo
+with at least one **open** PR.
+
+**Option A — fork the workshop repo (easiest).**
+
+Fork **https://github.com/bennorris123/stock-demo**, then open a pull request (PR) in
+*your fork* from one of the five feature branches:
+
+```
+feat/refresh-button
+feat/health-endpoint
+perf/sparkline-window
+feat/debug-exec
+chore/update-deps
+```
+
+They're a mix — reviewing them is the exercise.
+
+The easiest way to open a PR is from the Github UI. Otherwise you can run:
+
+```bash
+git clone https://github.com/<you>/stock-demo.git
+cd stock-demo
+git checkout <branch>
+gh pr create --repo <you>/stock-demo --base main --head <branch> --fill
+# (or use the "Compare & pull request" link GitHub shows for the branch)
+```
+
+Then set `target_repo=<you>/stock-demo` in `.env`.
+
+**Review one PR at a time.** Because the agent reviews *all* open PRs in the repo,
+close the PR before opening the next branch — otherwise it reviews them together,
+and re-comments on any it has already reviewed.
+
+**Option B — your own repo.** Any repo you can push to that has an open pull
+request. Set `target_repo=owner/repo`, and make sure your token can read it and
+write pull-request comments.
+
+If the repo has no open PRs, the agent just prints `No open PRs in <repo>`.
+
+---
+
 ## Step 1 — Configure
 
 ```bash
