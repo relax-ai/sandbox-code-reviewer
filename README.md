@@ -17,7 +17,7 @@ Two things to sign up for, plus a repo to review:
 | You need | What it's for | Notes |
 |---|---|---|
 | **A Relax API key** | Authenticates the sandbox API **and** is the key the agent uses to call the model | One key does both. Looks like `rak_…` |
-| **A GitHub personal access token (PAT)** | Lets the agent read PR diffs and post review comments | Needs **read and write on pull requests** for the repos you want reviewed. Classic token: the `repo` scope. Fine-grained token: *Contents: read* + *Pull requests: read and write* |
+| **A GitHub personal access token (PAT)** | Lets the agent read PR diffs and post review comments | Needs **read and write on pull requests** for the repos you want reviewed. See **[Creating a GitHub token](docs/create-github-token.md)** |
 | **A target repo** | The repository whose open PRs get reviewed | `owner/repo`, e.g. `acme/website`. It should have at least one **open** pull request |
 
 On your machine you also need `curl`, `jq`, and `git`.
