@@ -1,81 +1,248 @@
-# relaxAI Sandbox — PR Review Agent
+# PR Review Demo — Step by Step
 
-Runs a single relaxAI agent session against the Relax API inside an ephemeral
-**Relax sandbox**. The agent lists the open pull requests in a GitHub repo,
-reviews each diff, and posts its findings back as a PR comment. One sandbox,
-one task, then you delete it.
+You'll run a relaxAI agent inside an isolated Relax sandbox. It lists the open
+pull requests in a GitHub repo, reads each diff, posts a review comment, and
+then you delete the whole machine with one command.
 
-This replaces the earlier Civo VM + Terraform version. There is no Terraform,
-no SSH, and no VM bootstrap: the Relax `/sandboxes` API provisions the machine
-and the sandbox itself handles isolation and network egress.
+**Why this needs a sandbox:** the agent runs an LLM with shell access against
+untrusted code. The sandbox has no public ports and its network egress is
+restricted, so the code under review can't reach anything it shouldn't.
 
-## How it works
-
-1. `deploy.sh` creates a sandbox via `POST /v1/sandboxes` (beta), injecting the
-   agent env (`ANTHROPIC_*`, `GH_TOKEN`, `TARGET_REPO`, `DRY_RUN`).
-2. It uploads `bootstrap.sh` + `prompt.txt` and installs what the agent needs.
-3. `./deploy.sh run` executes the agent session in the sandbox; output goes to
-   `/workspace/claude-output.log` and `/workspace/completion.txt`.
-4. `./deploy.sh logs|status|verify` inspect it; `./destroy.sh` deletes it.
+---
 
 ## Prerequisites
 
-- `curl`, `jq`, `git`
-- A Relax API key (`rak_...`)
-- A GitHub PAT with pull-requests read+write on the target repo
+Two things to sign up for, plus a repo to review:
 
-## Quick start
+| You need | What it's for | Notes |
+|---|---|---|
+| **A Relax API key** | Authenticates the sandbox API **and** is the key the agent uses to call the model | One key does both. Looks like `rak_…` |
+| **A GitHub personal access token (PAT)** | Lets the agent read PR diffs and post review comments | Needs **read and write on pull requests** for the repos you want reviewed. Classic token: the `repo` scope. Fine-grained token: *Contents: read* + *Pull requests: read and write* |
+| **A target repo** | The repository whose open PRs get reviewed | `owner/repo`, e.g. `acme/website`. It should have at least one **open** pull request |
 
-```bash
-cp .env.example .env      # fill in api_key, github_token, target_repo
-./deploy.sh               # create sandbox + install the agent setup
-./deploy.sh verify        # check agent setup, env, and model access
-./deploy.sh run           # run the review session
-./destroy.sh              # delete the sandbox
+On your machine you also need `curl`, `jq`, and `git`.
+
+---
+
+## Choose a repo to review
+
+The agent reviews **every open pull request** in `target_repo`, so you need a repo
+with at least one **open** PR.
+
+**Option A — fork the workshop repo (easiest).**
+
+Fork **https://github.com/bennorris123/stock-demo**, then open a pull request (PR) in
+*your fork* from one of the five feature branches:
+
+```
+feat/refresh-button
+feat/health-endpoint
+perf/sparkline-window
+feat/debug-exec
+chore/update-deps
 ```
 
-See [`demo-guide.md`](demo-guide.md) for the full step-by-step walkthrough.
+They're a mix — reviewing them is the exercise.
 
-## Commands
+The easiest way to open a PR is from the Github UI. Otherwise you can run:
+
+```bash
+git clone https://github.com/<you>/stock-demo.git
+cd stock-demo
+git checkout <branch>
+gh pr create --repo <you>/stock-demo --base main --head <branch> --fill
+# (or use the "Compare & pull request" link GitHub shows for the branch)
+```
+
+Then set `target_repo=<you>/stock-demo` in `.env`.
+
+**Review one PR at a time.** Because the agent reviews *all* open PRs in the repo,
+close the PR before opening the next branch — otherwise it reviews them together,
+and re-comments on any it has already reviewed.
+
+**Option B — your own repo.** Any repo you can push to that has an open pull
+request. Set `target_repo=owner/repo`, and make sure your token can read it and
+write pull-request comments.
+
+If the repo has no open PRs, the agent just prints `No open PRs in <repo>`.
+
+---
+
+## Step 1 — Configure
+
+```bash
+cp .env.example .env
+```
+
+Set these in `.env`:
+
+| Key | What it is |
+|---|---|
+| `api_key` | Your Relax key (sandbox API + model). |
+| `github_token` | Your GitHub PAT — needs pull-requests write on the target repo. |
+| `target_repo` | The repo to review, `owner/repo`. |
+| `dry_run` | `1` prints the review instead of posting. `0` posts it live. |
+
+Leave the sandbox defaults as-is unless you need a different size or lifetime.
+
+---
+
+## Step 2 — Provision the sandbox (~1–2 min)
+
+```bash
+./deploy.sh
+```
+
+Creates the sandbox, installs what the agent needs inside it (Node, the GitHub
+CLI, Claude Code), uploads the prompt (the instructions for the PR reviewer agent), and leaves the sandbox running. When it
+finishes it prints a **Verify** block you can copy-paste.
+
+---
+
+## Step 3 — Verify it's alive
+
+```bash
+./deploy.sh verify
+```
+
+Expect: a Node version, a `gh` version, an agent version, the injected env
+(`ANTHROPIC_BASE_URL`, `TARGET_REPO`, `DRY_RUN`, keys shown as `set`), and a
+short reply from the model. If the model responds with "Hello!", the sandbox can
+reach the Relax API and your key works. If it can't, the command says so —
+it prints the HTTP status and the error, and exits non-zero.
+
+---
+
+## Step 4 — Run the review
+
+```bash
+./deploy.sh run
+```
+
+Concretely, `deploy.sh` sends **one command** into the sandbox:
+
+```
+claude --print -p "$(cat /workspace/prompt.txt)"
+```
+
+That runs a **Claude Code** session (connected to the relaxAI API) as a normal process *inside the sandbox*, with shell access and your
+GitHub token in its environment. It's given the instructions from `prompt.txt` (at root of this repo) and nothing else, and works through them start-to-finish without asking for confirmation (`--print` means non-interactive):
+
+1. `gh pr list` → the **open pull requests** in `target_repo`;
+2. `gh pr diff <n>` → each PR's **diff**, which it reads and reasons about;
+3. it writes a review per PR to `/workspace/review-PR-<number>.md` — summary,
+   correctness/style notes, and a verdict;
+4. it delivers that file: prints it when `dry_run=1`, or posts it as a comment
+   on the PR (`gh pr comment --body-file`) when `dry_run=0` (Step 5)
+
+The model calls go out to the relaxAI API over `$endpoint`. Everything else — the
+`gh` commands, the file writes — happens inside the sandbox; your laptop only
+starts the process and prints what it produced. 
+
+The key: **Nothing runs on your laptop**
+
+`deploy.sh` waits for that process to exit (5-minute cap, with a `waiting`
+heartbeat), then prints the outcome once: the tally plus the review file(s).
+
+---
+
+## Step 5 — Go live
+
+Edit `.env`:
+
+```
+dry_run=0
+```
+Which means the agent will go ahead and upload its report to the PR.
+
+`dry_run`, the model, and `target_repo` are applied when the session runs, so
+there's no need to re-deploy — just:
+
+```bash
+./deploy.sh run
+```
+
+Now open the pull request — there should be a new comment with the review and a
+verdict.
+
+---
+
+## Step 6 — Inspect and iterate
+
+```bash
+./deploy.sh logs      # last agent output
+./deploy.sh status    # sandbox status + last completion record
+```
+
+`prompt.txt` is uploaded at deploy time, so after editing it re-run
+`./deploy.sh` (or upload it again) before `./deploy.sh run`.
+
+---
+
+## Step 7 — Tear down
+
+```bash
+./destroy.sh
+```
+
+---
+
+## What just happened
+
+- A relaxAI agent session ran against the relaxAI API, in a sandbox it doesn't
+  host.
+- It reviewed **untrusted code** inside a contained sandbox, egress limited to
+  GitHub, package registries, and the model.
+- The whole machine disappeared with **one command**.
+- Nothing ran on your local machine
+
+## Command reference
 
 | Command | What it does |
 |---|---|
 | `./deploy.sh` | Create the sandbox and install what the agent needs (leaves it running). |
-| `./deploy.sh run` | Run the PR-review session and print the output. |
-| `./deploy.sh logs` | Print the last agent output. |
-| `./deploy.sh status` | Sandbox status + last completion record. |
 | `./deploy.sh verify` | Agent setup, injected env, and model reachability. |
+| `./deploy.sh run` | Run the review session and print the result. |
+| `./deploy.sh logs` | Print the last agent output. |
+| `./deploy.sh status` | Sandbox status + the last completion record. |
 | `./destroy.sh [id]` | Delete the sandbox (from `.sandbox-id`, or an explicit id). |
 
-## Config
+## What's in this directory
 
-All configuration lives in `.env` (see `.env.example`). The important knobs:
-
-- **`endpoint`** — sandboxes/model host, defaults to `api.beta.relax.ai`.
-- **`model_id`** — the model the agent uses (defaults to `DeepSeek-V4-Pro`).
-- **`target_repo`** / **`github_token`** / **`dry_run`** — the review target.
-- **`networking_type`** / **`allowed_hosts`** — egress policy. `limited` is the
-  containment story.
-- **`sandbox_timeout`** — sandbox lifetime.
-
-The env is injected when the sandbox is created, so changing `.env` requires
-`./destroy.sh && ./deploy.sh`.
-
-The prompt lives in `prompt.txt` and is uploaded at deploy time.
-
-## Layout
-
-```
-bootstrap.sh   installs what the agent needs inside the sandbox
-deploy.sh      create / run / logs / status / verify
-destroy.sh     delete the sandbox
-prompt.txt     the review instructions given to the agent
-demo-guide.md  step-by-step demo walkthrough
-```
+| File | Role |
+|---|---|
+| `deploy.sh` | create / run / logs / status / verify |
+| `bootstrap.sh` | installs what the agent needs inside the sandbox |
+| `destroy.sh` | deletes the sandbox recorded in `.sandbox-id` |
+| `prompt.txt` | the instructions handed to the agent |
+| `.env.example` | template for your `.env` |
 
 ## Notes
 
-- `bootstrap.sh` intentionally does **not** create users, set up iptables, or
-  shred cloud-init secrets — those were Civo-specific and are now the sandbox's
-  responsibility.
-- `.env` and `.sandbox-id` are gitignored — never commit them.
+- **Which `.env` changes need a re-deploy:** `api_key`, `github_token`, and
+  `claude_code_version` are injected when the sandbox is created, so changing
+  them means `./destroy.sh && ./deploy.sh`. `model_id`, `target_repo`, and
+  `dry_run` are applied when the session runs — edit `.env` and re-run.
+- **Other knobs**, usually left alone: `model_id`, `networking_type` /
+  `allowed_hosts` (egress policy — `limited` is the containment story), and
+  `sandbox_timeout` (how long the sandbox lives).
+- `.env` (your keys) and `.sandbox-id` are gitignored — never commit them.
+
+---
+
+## Troubleshooting
+
+- **`./deploy.sh` fails during install with a network/DNS error** — the
+  `limited` allowlist is missing a host. Set `networking_type=unrestricted` in
+  `.env` and re-run.
+- **`verify` reports `FAILED (http 404) ... does not exist`** — the model id
+  isn't available on that host. Check `model_id` in `.env` against the models
+  listed by `GET https://$endpoint/v1/models`.
+- **`./deploy.sh run` finishes but prints nothing** — check `./deploy.sh logs`
+  and `completion.txt`; the model call usually fails first if the key is wrong.
+- **GitHub returns 403 when commenting** — your PAT needs pull-requests write on
+  that repo; you can't comment on repos you don't have access to.
+- **Nothing is found to review** — `target_repo` must be `owner/repo` and the
+  repo must have open PRs.
+- **Deploy fails with "target_repo not set"** — fill in `.env` before deploying;
+  the agent's env is injected when the sandbox is created.
