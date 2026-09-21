@@ -1,6 +1,6 @@
 # AI Pull-Request Tester in relaxAI Sandbox — Step by Step Guide
 
-You'll run a relaxAI agent inside an isolated Relax sandbox. It lists the open
+You'll run a relaxAI agent inside an isolated relaxAI sandbox. It lists the open
 pull requests in a GitHub repo, reads each diff, posts a review comment, and
 then you delete the whole machine with one command.
 
@@ -12,13 +12,12 @@ restricted, so the code under review can't reach anything it shouldn't.
 
 ## Prerequisites
 
-Two things to sign up for, plus a repo to review:
+Two things to set up, then pick a repo to review (next section):
 
 | You need | What it's for | Notes |
 |---|---|---|
-| **A Relax API key** | Authenticates the sandbox API **and** is the key the agent uses to call the model | One key does both. Looks like `rak_…` |
+| **A relaxAI API key** | Authenticates the sandbox API **and** is the key the agent uses to call the model | One key does both. Looks like `rak_…` |
 | **A GitHub personal access token (PAT)** | Lets the agent read PR diffs and post review comments | Needs **read and write on pull requests** for the repos you want reviewed. See **[Creating a GitHub token](docs/create-github-token.md)** |
-| **A target repo** | The repository whose open PRs get reviewed | `owner/repo`, e.g. `acme/website`. It should have at least one **open** pull request |
 
 On your machine you also need `curl`, `jq`, and `git`.
 
@@ -78,7 +77,7 @@ Set these in `.env`:
 
 | Key | What it is |
 |---|---|
-| `api_key` | Your Relax key (sandbox API + model). |
+| `api_key` | Your relaxAI key (sandbox API + model). |
 | `github_token` | Your GitHub PAT — needs pull-requests write on the target repo. |
 | `target_repo` | The repo to review, `owner/repo`. |
 | `dry_run` | `1` prints the review instead of posting. `0` posts it live. |
@@ -108,7 +107,7 @@ finishes it prints a **Verify** block you can copy-paste.
 Expect: a Node version, a `gh` version, an agent version, the injected env
 (`ANTHROPIC_BASE_URL`, `TARGET_REPO`, `DRY_RUN`, keys shown as `set`), and a
 short reply from the model. If the model responds with "Hello!", the sandbox can
-reach the Relax API and your key works. If it can't, the command says so —
+reach the relaxAI API and your key works. If it can't, the command says so —
 it prints the HTTP status and the error, and exits non-zero.
 
 ---
@@ -125,8 +124,11 @@ Concretely, `deploy.sh` sends **one command** into the sandbox:
 claude --print -p "$(cat /workspace/prompt.txt)"
 ```
 
-That runs a **Claude Code** session (connected to the relaxAI API) as a normal process *inside the sandbox*, with shell access and your
-GitHub token in its environment. It's given the instructions from `prompt.txt` (at root of this repo) and nothing else, and works through them start-to-finish without asking for confirmation (`--print` means non-interactive):
+That runs **Claude Code** inside the sandbox as a normal process, with shell access
+and your GitHub token in its environment; its model calls go out to the relaxAI API.
+It's given the instructions from `prompt.txt` (at the root of this repo) and nothing
+else, and works through them start-to-finish without asking for confirmation
+(`--print` means non-interactive):
 
 1. `gh pr list` → the **open pull requests** in `target_repo`;
 2. `gh pr diff <n>` → each PR's **diff**, which it reads and reasons about;
@@ -153,7 +155,7 @@ Edit `.env`:
 ```
 dry_run=0
 ```
-Which means the agent will go ahead and upload its report to the PR.
+Which tells the agent to post its review as a comment on the PR.
 
 `dry_run`, the model, and `target_repo` are applied when the session runs, so
 there's no need to re-deploy — just:
@@ -223,9 +225,9 @@ verdict.
   `claude_code_version` are injected when the sandbox is created, so changing
   them means `./destroy.sh && ./deploy.sh`. `model_id`, `target_repo`, and
   `dry_run` are applied when the session runs — edit `.env` and re-run.
-- **Other knobs**, usually left alone: `model_id`, `networking_type` /
-  `allowed_hosts` (egress policy — `limited` is the containment story), and
-  `sandbox_timeout` (how long the sandbox lives).
+- **Other knobs**, usually left alone: `networking_type` / `allowed_hosts`
+  (egress policy — `limited` is the containment story) and `sandbox_timeout`
+  (how long the sandbox lives).
 - `.env` (your keys) and `.sandbox-id` are gitignored — never commit them.
 
 ---

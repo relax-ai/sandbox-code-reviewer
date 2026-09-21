@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # -----------------------------------------------------------------------------
-# deploy.sh — run a Claude Code PR-review agent inside a Relax sandbox.
+# deploy.sh — run a Claude Code PR-review agent inside a relaxAI sandbox.
 #
 #   ./deploy.sh            provision the sandbox + agent setup (leaves it running)
 #   ./deploy.sh run        run the PR-review session now and print the output

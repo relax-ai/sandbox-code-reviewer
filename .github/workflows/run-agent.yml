@@ -1,9 +1,9 @@
-# Provisions a Relax sandbox, runs the relaxAI PR-review agent inside it,
+# Provisions a relaxAI sandbox, runs the relaxAI PR-review agent inside it,
 # streams the agent output into this workflow, then destroys the sandbox.
 # Triggers on push to main or manually via the GitHub Actions UI.
 #
 # Required repo secrets:
-#   RELAX_API_KEY     Relax API key (rak_...), used for the sandbox API + model
+#   RELAX_API_KEY     relaxAI API key (rak_...), used for the sandbox API + model
 #   AGENT_GH_TOKEN    GitHub PAT with pull-requests write on the target repo
 # Required repo variables (Settings -> Variables):
 #   AGENT_GH_REPO     target repo, owner/repo
