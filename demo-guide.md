@@ -50,7 +50,7 @@ Leave the sandbox defaults as-is unless you need a different size or lifetime.
 ```
 
 Creates the sandbox, installs what the agent needs inside it (Node, the GitHub
-CLI, Claude Code), uploads the prompt, and leaves the sandbox running. When it
+CLI, Claude Code), uploads the prompt (the instructions for the PR reviewer agent), and leaves the sandbox running. When it
 finishes it prints a **Verify** block you can copy-paste.
 
 ---
@@ -63,7 +63,7 @@ finishes it prints a **Verify** block you can copy-paste.
 
 Expect: a Node version, a `gh` version, an agent version, the injected env
 (`ANTHROPIC_BASE_URL`, `TARGET_REPO`, `DRY_RUN`, keys shown as `set`), and a
-short reply from the model. If the model line returns text, the sandbox can
+short reply from the model. If the model responds with "Hello!", the sandbox can
 reach the Relax API and your key works. If it can't, the command says so —
 it prints the HTTP status and the error, and exits non-zero.
 
@@ -75,10 +75,23 @@ it prints the HTTP status and the error, and exits non-zero.
 ./deploy.sh run
 ```
 
-This starts the agent session (5-minute cap) and waits for it to finish,
-printing a `waiting` heartbeat while it works. When it's done the review is
-printed once: the tally plus, for each PR, the review the agent wrote to
-`/workspace/review-PR-<number>.md`. In dry-run mode nothing is posted to GitHub.
+Under the hood, this starts **Claude Code** *inside the sandbox* in
+non-interactive mode (`claude --print`) and hands it the instructions in
+`prompt.txt`. The agent then works through those instructions:
+
+1. runs the GitHub CLI (`gh`) to list the **open pull requests** in `target_repo`;
+2. fetches each PR's **diff** and reads it;
+3. writes a review for each PR to `/workspace/review-PR-<number>.md` — a summary,
+   correctness/style notes, and a verdict;
+4. delivers it: with `dry_run=1` it just prints the review; with `dry_run=0` it
+   posts the file as a comment on the PR (`gh pr comment --body-file`).
+
+All of that happens inside the sandbox, with your GitHub token injected as
+`GH_TOKEN` and the model calls going out to the Relax API over `$endpoint` — your
+laptop only starts the session and prints the result.
+
+`deploy.sh` waits for it to finish (5-minute cap, showing a `waiting` heartbeat),
+then prints the outcome once: the tally plus the review file(s) the agent wrote.
 
 ---
 
