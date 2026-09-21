@@ -1,4 +1,4 @@
-# PR Review Demo — Step by Step
+# AI Pull-Request Tester in relaxAI Sandbox — Step by Step Guide
 
 You'll run a relaxAI agent inside an isolated Relax sandbox. It lists the open
 pull requests in a GitHub repo, reads each diff, posts a review comment, and
