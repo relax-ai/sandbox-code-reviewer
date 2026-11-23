@@ -5,7 +5,7 @@ set -euo pipefail
 # demo.sh — the relaxAI sandbox workshop.
 #
 #   ./demo.sh up                create the sandbox + install the agent (~2 min)
-#   ./demo.sh verify            check tools, model access and the egress policy
+#   ./demo.sh verify            check tools, model access and the network policy
 #   ./demo.sh review [PR]       agent clones, installs, tests, runs and reviews
 #   ./demo.sh egress            same install, then again with example.com allowed
 #   ./demo.sh limits [which]    network | memory (default: both)
@@ -165,8 +165,20 @@ do_verify() {
   probe='code=$(curl -sS -m 30 -o /tmp/m.json -w "%{http_code}" "$ANTHROPIC_BASE_URL/v1/messages" -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" -d "{\"model\":\"'"$MODEL"'\",\"max_tokens\":64,\"messages\":[{\"role\":\"user\",\"content\":\"Say hello\"}]}"); if [ "$code" = 200 ]; then echo "OK: $(jq -r "[.content[]?|select(.type==\"text\")|.text]|join(\"\")" /tmp/m.json)"; else echo "FAILED (http $code): $(head -c 300 /tmp/m.json)"; fi'
   exec_out "$probe"
 
-  say "--- egress policy ---"
-  exec_out "$PROBE echo 'expect REACHED:'; probe https://api.github.com; echo 'expect BLOCKED:'; probe https://example.com"
+  say "--- network policy (limited) ---"
+  echo "Allowed:"
+  tr ',' '\n' <<<"$ALLOWED" | sed 's/^/  /'
+  echo "  + package registries (npm, PyPI, crates.io, RubyGems, Go, Docker Hub, Maven, NuGet)"
+  echo "Denied:"
+  echo "  every other host"
+  # Prove the policy is in force: one allowed host and one denied host.
+  local got
+  got="$(exec_out "$PROBE probe https://api.github.com; probe https://example.com")"
+  if grep -q 'REACHED  https://api.github.com' <<<"$got" && grep -q 'BLOCKED  https://example.com' <<<"$got"; then
+    echo "${G}Check: api.github.com reachable, example.com blocked. The policy is in force.${N}"
+  else
+    echo "${R}Check failed, the policy isn't behaving as listed:${N}"; printf '%s\n' "$got" | sed 's/^/  /'
+  fi
 }
 
 do_down() {

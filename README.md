@@ -8,6 +8,8 @@ server, then tells you what it found, with the output to prove it.
 **You need:** a laptop with a terminal, and the **relaxAI API key** your host
 gives you. No accounts or installs beyond what's below. 
 
+Head to `https://tinyurl.com/nav-key-26` for your relaxAI Beta API key for this workshop.
+
 ---
 
 ## Step 1: Open a terminal and check your tools (2 min)
@@ -23,6 +25,9 @@ Run:
 curl --version | head -1; git --version; jq --version
 ```
 
+These are the only tools you need on your laptop: everything else (the code
+under review, its dependencies, the AI agent) will run in the sandbox.
+
 You should see three version lines. If one is missing:
 
 | Missing | Mac | Linux / WSL |
@@ -36,6 +41,11 @@ You should see three version lines. If one is missing:
 git clone https://github.com/relax-ai/sandbox-code-reviewer.git
 cd sandbox-code-reviewer
 ```
+
+This is all you download: a short script, `demo.sh`, which drives the relaxAI
+sandbox API with plain `curl` calls, and [prompt.txt](prompt.txt), the agent's
+instructions. The app being reviewed isn't here: the agent fetches it inside
+the sandbox.
 
 ## Step 3: Add your API key (1 min)
 
@@ -53,8 +63,10 @@ api_key=rak_your_key_here
 Save and close (in nano: **Ctrl+O**, **Enter**, **Ctrl+X**). Leave everything
 else as it is.
 
-> Keep the key to yourself: don't paste it in chat or commit it. `.env` is
-> already excluded from git.
+This one key does two jobs: it lets `demo.sh` create and control your sandbox
+through the relaxAI API, and it's passed into the sandbox so the agent can use
+an AI model served by relaxAI.
+
 
 ## Step 4: Create your sandbox (2 min)
 
@@ -62,8 +74,19 @@ else as it is.
 ./demo.sh up
 ```
 
-This makes one API call to create a sandbox with limited internet access,
-then installs the AI agent inside it. Wait for:
+This makes one API call (`POST /v1/sandboxes`) to create your own sandbox:
+
+- **A small cloud machine:** Ubuntu 22.04 with Node 22, git and curl, 2 CPUs,
+  4 GiB of memory and 5 GiB of disk. It gets its own name, like
+  `relaxai-workshop-3fa9c2`, and deletes itself after 4 hours if you forget.
+- **Limited internet access:** it can only reach an allowlist of hosts: the
+  relaxAI API (for the AI model), GitHub (to fetch the PRs) and package
+  registries such as npm. Everything else is blocked.
+- **The AI agent:** the script then uploads [prompt.txt](prompt.txt) and
+  installs Claude Code inside the sandbox, set up to use a model served by
+  relaxAI with your key.
+
+Nothing is installed on your laptop. Wait for:
 
 ```
 Sandbox ready: <id>  (egress: limited)
@@ -79,8 +102,10 @@ Look for three things:
 
 - **tools:** a Node, git and Claude Code version.
 - **model:** `OK: Hello!` (or another greeting). The agent can reach the AI model.
-- **egress policy:** `api.github.com` is **REACHED** and `example.com` is
-  **BLOCKED**. Your sandbox can only talk to an allowlist of hosts.
+- **network policy:** the hosts your sandbox is **allowed** to reach (the
+  relaxAI API, GitHub and package registries), and that **every other host is
+  denied**. The green check underneath confirms it: an allowed host was
+  reached and a denied one was blocked.
 
 ## Step 6: Let the agent review the PRs (10 min)
 
@@ -139,12 +164,16 @@ its reasoning and each command's output, run:
 | PR | Finding |
 |---|---|
 | **#1** Support fractional discount percentages | The description says "all tests pass". The agent runs `npm test` and one fails: rounding changed for half-cent values. |
-| **#2** Add bulk quotes endpoint | Calling `/api/quotes` without `symbols` throws a `TypeError` and **takes the whole server down**. Easy to miss in the diff; obvious once you run it. |
+| **#2** Add CSV price export | The PR says it "only serves files from `data/`". The agent asks for `?file=../../../../etc/os-release` and gets a system file back: the endpoint can read **any file on the machine**. On your laptop, that could be your SSH keys or cloud credentials; in the sandbox there's nothing of yours to find. |
 | **#3** Track installs with a postinstall ping | `npm install` now secretly calls `example.com`. The agent sees the call fail and reports that the sandbox's egress policy blocked it. Step 7 proves it was the sandbox. |
 
-**PR #1 and #2 show why the agent should *run* the code. PR #3 shows why that
-running belongs in a sandbox:** the code itself tried to do something you didn't
-expect, and the sandbox stopped it.
+**Each PR shows a different reason to use a sandbox:**
+
+- **#1:** the agent ran commands it chose itself, as root, and none of them
+  touched your machine.
+- **#2:** the code could read files it shouldn't, and in the sandbox there's
+  nothing of yours to find.
+- **#3:** the code tried to send data out, and the network policy blocked it.
 
 Models vary, so your agent may word things differently or find something extra.
 If it misses one, run `./demo.sh logs`: what did it run, and what didn't it try?
@@ -180,9 +209,9 @@ inside it.
 ./demo.sh limits
 ```
 
-- **Network:** allowlisted hosts (GitHub, npm) are reachable; others aren't.
-  `example.com` is still blocked here: this is your sandbox, which Step 7
-  didn't change.
+This shows the sandbox's resource and memory limits. Code that goes out of control is
+stopped at the sandbox's memory limit, instead of slowing down or freezing your laptop.
+
 - **Memory:** a process allocates memory until it reaches the sandbox's limit
   and is stopped (`exit 137`). The sandbox itself keeps running.
 
@@ -242,7 +271,7 @@ EOF
 ```bash
 cat >> prompt.txt <<'EOF'
 EXTRA TASK: start the server and time 500 requests to /api/prices, then 500 to
-/api/quotes?symbols=ACME,GLOBEX (a bash loop with curl is fine). Report requests
+/api/export?file=prices.csv (a bash loop with curl is fine). Report requests
 per second for each.
 EOF
 ./demo.sh review 2
