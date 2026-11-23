@@ -5,6 +5,8 @@ machine) and have an AI agent review three pull requests inside it. The agent
 doesn't just read the code: it installs it, runs the tests and starts the
 server, then tells you what it found, with the output to prove it.
 
+**The key thing I want you to take away from this workshop: a secure relaxAI sandbox lets you run and test unfamiliar code safely. Keep that code off your local machine and run it in a throwaway box instead.**
+
 **You need:** a laptop with a terminal, and the **relaxAI API key** your host
 gives you. No accounts or installs beyond what's below. 
 
