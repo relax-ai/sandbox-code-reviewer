@@ -1,250 +1,313 @@
-# AI Pull-Request Tester in relaxAI Sandbox — Step by Step Guide
+# Workshop guide: an AI code reviewer in a relaxAI sandbox
 
-You'll run a relaxAI agent inside an isolated relaxAI sandbox. It lists the open
-pull requests in a GitHub repo, reads each diff, posts a review comment, and
-then you delete the whole machine with one command.
+In this workshop you'll create your own relaxAI sandbox (a disposable cloud
+machine) and have an AI agent review three pull requests inside it. The agent
+doesn't just read the code: it installs it, runs the tests and starts the
+server, then tells you what it found, with the output to prove it.
 
-**Why this needs a sandbox:** the agent runs an LLM with shell access against
-untrusted code. The sandbox has no public ports and its network egress is
-restricted, so the code under review can't reach anything it shouldn't.
-
----
-
-## Prerequisites
-
-Two things to set up, then pick a repo to review (next section):
-
-| You need | What it's for | Notes |
-|---|---|---|
-| **A relaxAI API key** | Authenticates the sandbox API **and** is the key the agent uses to call the model | One key does both. Looks like `rak_…` |
-| **A GitHub personal access token (PAT)** | Lets the agent read PR diffs and post review comments | Needs **read and write on pull requests** for the repos you want reviewed. See **[Creating a GitHub token](docs/create-github-token.md)** |
-
-On your machine you also need `curl`, `jq`, and `git`.
+**You need:** a laptop with a terminal, and the **relaxAI API key** your host
+gives you. No accounts or installs beyond what's below. 
 
 ---
 
-## Choose a repo to review
+## Step 1: Open a terminal and check your tools (2 min)
 
-The agent reviews **every open pull request** in `target_repo`, so you need a repo
-with at least one **open** PR.
+- **Mac:** open **Terminal** (press ⌘ Space, type *Terminal*).
+- **Linux:** open your usual terminal.
+- **Windows:** open **Ubuntu (WSL)** if you have it. If you don't, pair up with
+  a neighbour on Mac or Linux: setting up WSL needs a restart.
 
-**Option A — fork the workshop repo (easiest).**
-
-Fork **https://github.com/bennorris123/stock-demo**, then open a pull request (PR) in
-*your fork* from one of the five feature branches:
-
-```
-feat/refresh-button
-feat/health-endpoint
-perf/sparkline-window
-feat/debug-exec
-chore/update-deps
-```
-
-They're a mix — reviewing them is the exercise.
-
-The easiest way to open a PR is from the Github UI. Otherwise you can run:
+Run:
 
 ```bash
-git clone https://github.com/<you>/stock-demo.git
-cd stock-demo
-git checkout <branch>
-gh pr create --repo <you>/stock-demo --base main --head <branch> --fill
-# (or use the "Compare & pull request" link GitHub shows for the branch)
+curl --version | head -1; git --version; jq --version
 ```
 
-Then set `target_repo=<you>/stock-demo` in `.env`.
+You should see three version lines. If one is missing:
 
-**Review one PR at a time.** Because the agent reviews *all* open PRs in the repo,
-close the PR before opening the next branch — otherwise it reviews them together,
-and re-comments on any it has already reviewed.
+| Missing | Mac | Linux / WSL |
+|---|---|---|
+| `git` | Run `git --version` again and click **Install** in the pop-up. | `sudo apt install -y git` |
+| `jq` | `brew install jq` (or ask your host) | `sudo apt install -y jq` |
 
-**Option B — your own repo.** Any repo you can push to that has an open pull
-request. Set `target_repo=owner/repo`, and make sure your token can read it and
-write pull-request comments.
+## Step 2: Get the workshop code (1 min)
 
-If the repo has no open PRs, the agent just prints `No open PRs in <repo>`.
+```bash
+git clone https://github.com/relax-ai/sandbox-code-reviewer.git
+cd sandbox-code-reviewer
+```
 
----
-
-## Step 1 — Configure
+## Step 3: Add your API key (1 min)
 
 ```bash
 cp .env.example .env
 ```
 
-Set these in `.env`:
+Open `.env` in any editor (for example `nano .env`, or `open -e .env` on a Mac)
+and paste your key after `api_key=`, with no spaces:
 
-| Key | What it is |
+```ini
+api_key=rak_your_key_here
+```
+
+Save and close (in nano: **Ctrl+O**, **Enter**, **Ctrl+X**). Leave everything
+else as it is.
+
+> Keep the key to yourself: don't paste it in chat or commit it. `.env` is
+> already excluded from git.
+
+## Step 4: Create your sandbox (2 min)
+
+```bash
+./demo.sh up
+```
+
+This makes one API call to create a sandbox with limited internet access,
+then installs the AI agent inside it. Wait for:
+
+```
+Sandbox ready: <id>  (egress: limited)
+```
+
+## Step 5: Check it works (1 min)
+
+```bash
+./demo.sh verify
+```
+
+Look for three things:
+
+- **tools:** a Node, git and Claude Code version.
+- **model:** `OK: Hello!` (or another greeting). The agent can reach the AI model.
+- **egress policy:** `api.github.com` is **REACHED** and `example.com` is
+  **BLOCKED**. Your sandbox can only talk to an allowlist of hosts.
+
+## Step 6: Let the agent review the PRs (10 min)
+
+The PRs are in a small stock-quote app:
+<https://github.com/bennorris123/sandbox-workshop-ticker/pulls>. Open the link
+and read PR #1 before you start: can you spot the problem just by reading?
+
+**First, read the agent's instructions.** Everything the agent does comes from
+one plain-text file, [prompt.txt](prompt.txt), in the folder you cloned. Open it
+in any editor, or in the terminal:
+
+```bash
+cat prompt.txt
+```
+
+Notice that it tells the agent to *run* each PR, not just read it: install it,
+run the tests, start the server and try unusual inputs, then back every claim
+with real output.
+
+**This does not run on your local machine, it runs in a throwaway relaxAI sandbox**
+
+Now start the first review:
+
+```bash
+./demo.sh review 1
+```
+
+While the agent works you'll see one line (in cyan) for each command it runs,
+then its report: a verdict, a one-line summary, up to three findings and the
+evidence for them. Compare the commands with `prompt.txt`: can you match each
+one to an instruction? Reviews are only printed on your screen, not posted to
+GitHub.
+
+> **Notice:** the agent chose every one of those commands itself and ran them
+> as root, with no one approving them. Would you let it do that on your laptop,
+> next to your SSH keys and cloud credentials? In the sandbox, the worst case
+> is a machine you delete.
+
+Now review the other two PRs:
+
+```bash
+./demo.sh review 2
+./demo.sh review 3
+```
+
+Each review takes about a minute. To see everything the agent did, including
+its reasoning and each command's output, run:
+
+```bash
+./demo.sh logs
+```
+
+<details>
+<summary><b>What the agent should find</b> (open after your reviews finish)</summary>
+
+| PR | Finding |
 |---|---|
-| `api_key` | Your relaxAI key (sandbox API + model). |
-| `github_token` | Your GitHub PAT — needs pull-requests write on the target repo. |
-| `target_repo` | The repo to review, `owner/repo`. |
-| `dry_run` | `1` prints the review instead of posting. `0` posts it live. |
+| **#1** Support fractional discount percentages | The description says "all tests pass". The agent runs `npm test` and one fails: rounding changed for half-cent values. |
+| **#2** Add bulk quotes endpoint | Calling `/api/quotes` without `symbols` throws a `TypeError` and **takes the whole server down**. Easy to miss in the diff; obvious once you run it. |
+| **#3** Track installs with a postinstall ping | `npm install` now secretly calls `example.com`. The agent sees the call fail and reports that the sandbox's egress policy blocked it. Step 7 proves it was the sandbox. |
 
-Leave the sandbox defaults as-is unless you need a different size or lifetime.
+**PR #1 and #2 show why the agent should *run* the code. PR #3 shows why that
+running belongs in a sandbox:** the code itself tried to do something you didn't
+expect, and the sandbox stopped it.
 
----
+Models vary, so your agent may word things differently or find something extra.
+If it misses one, run `./demo.sh logs`: what did it run, and what didn't it try?
 
-## Step 2 — Provision the sandbox (~1–2 min)
+</details>
 
-```bash
-./deploy.sh
-```
+## Step 7: Same code, two network policies (3 min)
 
-Creates the sandbox, installs what the agent needs inside it (Node, the GitHub
-CLI, Claude Code), uploads the prompt (the instructions for the PR reviewer agent), and leaves the sandbox running. When it
-finishes it prints a **Verify** block you can copy-paste.
-
----
-
-## Step 3 — Verify it's alive
+Did the sandbox really block PR #3's request? Prove it:
 
 ```bash
-./deploy.sh verify
+./demo.sh egress
 ```
 
-Expect: a Node version, a `gh` version, an agent version, the injected env
-(`ANTHROPIC_BASE_URL`, `TARGET_REPO`, `DRY_RUN`, keys shown as `set`), and a
-short reply from the model. If the model responds with "Hello!", the sandbox can
-reach the relaxAI API and your key works. If it can't, the command says so —
-it prints the HTTP status and the error, and exits non-zero.
+This runs `npm install` for PR #3 in two sandboxes:
 
----
+1. In **your sandbox**, with egress **limited**:
+   `analytics: could not reach example.com`.
+2. Press **Enter**. The script creates a **second sandbox whose allowlist also
+   includes `example.com`** (this takes under a minute) and runs exactly the
+   same install: `analytics: install event sent (http 200)`.
+3. The second sandbox is deleted automatically. Yours is never changed:
+   `example.com` was only allowed in the temporary sandbox, so yours still
+   blocks it.
 
-## Step 4 — Run the review
+Same code, same command, one extra host on the allowlist, different result:
+the network policy is chosen by whoever creates the sandbox, not by the code
+inside it.
+
+## Step 8: See the sandbox's limits (2 min)
 
 ```bash
-./deploy.sh run
+./demo.sh limits
 ```
 
-Concretely, `deploy.sh` sends **one command** into the sandbox:
+- **Network:** allowlisted hosts (GitHub, npm) are reachable; others aren't.
+  `example.com` is still blocked here: this is your sandbox, which Step 7
+  didn't change.
+- **Memory:** a process allocates memory until it reaches the sandbox's limit
+  and is stopped (`exit 137`). The sandbox itself keeps running.
 
-```
-claude --print -p "$(cat /workspace/prompt.txt)"
-```
+## Stretch task: make the sandbox do something new (10–20 min)
 
-That runs **Claude Code** inside the sandbox as a normal process, with shell access
-and your GitHub token in its environment; its model calls go out to the relaxAI API.
-It's given the instructions from `prompt.txt` (at the root of this repo) and nothing
-else, and works through them start-to-finish without asking for confirmation
-(`--print` means non-interactive):
+Done early? Change what runs in your sandbox. Pick any ideas below, in any
+order, and compare results with your neighbour.
 
-1. `gh pr list` → the **open pull requests** in `target_repo`;
-2. `gh pr diff <n>` → each PR's **diff**, which it reads and reasons about;
-3. it writes a review per PR to `/workspace/review-PR-<number>.md` — summary,
-   correctness/style notes, and a verdict;
-4. it delivers that file: prints it when `dry_run=1`, or posts it as a comment
-   on the PR (`gh pr comment --body-file`) when `dry_run=0` (Step 5)
-
-The model calls go out to the relaxAI API over `$endpoint`. Everything else — the
-`gh` commands, the file writes — happens inside the sandbox; your laptop only
-starts the process and prints what it produced. 
-
-The key: **Nothing runs on your laptop**
-
-`deploy.sh` waits for that process to exit (5-minute cap, with a `waiting`
-heartbeat), then prints the outcome once: the tally plus the review file(s).
-
----
-
-## Step 5 — Go live
-
-Edit `.env`:
-
-```
-dry_run=0
-```
-Which tells the agent to post its review as a comment on the PR.
-
-`dry_run`, the model, and `target_repo` are applied when the session runs, so
-there's no need to re-deploy — just:
+**How it works:** [prompt.txt](prompt.txt) is the agent's instructions, and
+`./demo.sh review` uploads a fresh copy every time it runs, so edits take effect
+immediately. Each idea below adds a few lines to the end of it. Nothing is ever
+pushed to GitHub, so experiment freely. To undo all your edits:
 
 ```bash
-./deploy.sh run
+git checkout prompt.txt
 ```
 
-Now open the pull request — there should be a new comment with the review and a
-verdict.
+### Change the agent's job
 
----
+Paste one of these into your terminal, then run the `review` command under it.
 
-## Step 6 — Inspect and iterate
+**1. Write the test that should have existed.** Can the agent catch the bug
+with a failing test?
 
 ```bash
-./deploy.sh logs      # last agent output
-./deploy.sh status    # sandbox status + last completion record
+cat >> prompt.txt <<'EOF'
+EXTRA TASK: for the PR you review, add a new test file in test/ that fails
+because of the problem you found. Show the npm test output with your test failing.
+EOF
+./demo.sh review 1
 ```
 
-`prompt.txt` is uploaded at deploy time, so after editing it re-run
-`./deploy.sh` (or upload it again) before `./deploy.sh run`.
-
----
-
-## Step 7 — Tear down
+**2. Fix it.** The agent edits its own copy of the code in the sandbox and
+proves the fix works.
 
 ```bash
-./destroy.sh
+cat >> prompt.txt <<'EOF'
+EXTRA TASK: after reviewing, fix the problem. Re-run the commands that showed
+the problem and show they now pass, then show your fix with git diff.
+EOF
+./demo.sh review 2
 ```
 
----
+**3. Try to break it.** How many ways can the agent find to upset the API?
 
-## What just happened
+```bash
+cat >> prompt.txt <<'EOF'
+EXTRA TASK: call every endpoint with at least 10 unusual inputs (empty, negative,
+huge, wrong case, symbols, emoji). Show a table: request, HTTP status, and whether
+the server was still running afterwards.
+EOF
+./demo.sh review 2
+```
 
-- A relaxAI agent session ran against the relaxAI API, in a sandbox it doesn't
-  host.
-- It reviewed **untrusted code** inside a contained sandbox, egress limited to
-  GitHub, package registries, and the model.
-- The whole machine disappeared with **one command**.
-- Nothing ran on your local machine
+**4. Race the endpoints.** A quick load test, run entirely in the sandbox.
 
-## Command reference
+```bash
+cat >> prompt.txt <<'EOF'
+EXTRA TASK: start the server and time 500 requests to /api/prices, then 500 to
+/api/quotes?symbols=ACME,GLOBEX (a bash loop with curl is fine). Report requests
+per second for each.
+EOF
+./demo.sh review 2
+```
 
-| Command | What it does |
-|---|---|
-| `./deploy.sh` | Create the sandbox and install what the agent needs (leaves it running). |
-| `./deploy.sh verify` | Agent setup, injected env, and model reachability. |
-| `./deploy.sh run` | Run the review session and print the result. |
-| `./deploy.sh logs` | Print the last agent output. |
-| `./deploy.sh status` | Sandbox status + the last completion record. |
-| `./destroy.sh [id]` | Delete the sandbox (from `.sandbox-id`, or an explicit id). |
+**5. Meet the firewall.** Ask the agent to explore its own network limits.
 
-## What's in this directory
+```bash
+cat >> prompt.txt <<'EOF'
+EXTRA TASK: before reviewing, use curl to try https://api.github.com,
+https://registry.npmjs.org and https://www.wikipedia.org. Explain which worked,
+which didn't, and why you think that is.
+EOF
+./demo.sh review 3
+```
 
-| File | Role |
-|---|---|
-| `deploy.sh` | create / run / logs / status / verify |
-| `bootstrap.sh` | installs what the agent needs inside the sandbox |
-| `destroy.sh` | deletes the sandbox recorded in `.sandbox-id` |
-| `prompt.txt` | the instructions handed to the agent |
-| `.env.example` | template for your `.env` |
+**6. Your own idea.** Some starters: review the PR as a strict security auditor,
+explain the change to a non-programmer, write the review as a haiku, or suggest
+a better name for every function the PR touches. Write it in plain English after
+`EXTRA TASK:`.
 
-## Notes
+Each idea you paste adds to the prompt, so they stack up. Run
+`git checkout prompt.txt` between ideas if you want the agent to focus on just one.
 
-- **Which `.env` changes need a re-deploy:** `api_key`, `github_token`, and
-  `claude_code_version` are injected when the sandbox is created, so changing
-  them means `./destroy.sh && ./deploy.sh`. `model_id`, `target_repo`, and
-  `dry_run` are applied when the session runs — edit `.env` and re-run.
-- **Other knobs**, usually left alone: `networking_type` / `allowed_hosts`
-  (egress policy — `limited` is the containment story) and `sandbox_timeout`
-  (how long the sandbox lives).
-- `.env` (your keys) and `.sandbox-id` are gitignored — never commit them.
+### Change the sandbox itself
 
----
+These change settings in `.env`. A new setting needs a new sandbox, so
+recreate it (about 2 minutes):
 
-## Troubleshooting
+```bash
+./demo.sh down && ./demo.sh up
+```
 
-- **`./deploy.sh` fails during install with a network/DNS error** — the
-  `limited` allowlist is missing a host. Set `networking_type=unrestricted` in
-  `.env` and re-run.
-- **`verify` reports `FAILED (http 404) ... does not exist`** — the model id
-  isn't available on that host. Check `model_id` in `.env` against the models
-  listed by `GET https://$endpoint/v1/models`.
-- **`./deploy.sh run` finishes but prints nothing** — check `./deploy.sh logs`
-  and `completion.txt`; the model call usually fails first if the key is wrong.
-- **GitHub returns 403 when commenting** — your PAT needs pull-requests write on
-  that repo; you can't comment on repos you don't have access to.
-- **Nothing is found to review** — `target_repo` must be `owner/repo` and the
-  repo must have open PRs.
-- **Deploy fails with "target_repo not set"** — fill in `.env` before deploying;
-  the agent's env is injected when the sandbox is created.
+**7. Open the firewall to one more site.** In `.env`, replace the
+`allowed_hosts=` line with this (the default list, plus Wikipedia at the end):
+
+```ini
+allowed_hosts=api.beta.relax.ai,github.com,api.github.com,codeload.github.com,objects.githubusercontent.com,raw.githubusercontent.com,www.wikipedia.org
+```
+
+Recreate the sandbox, then run `./demo.sh limits network`: Wikipedia is now
+**REACHED**. Then try idea 5 again and see whether the agent notices the change.
+
+**8. Shrink the machine.** In `.env`, set `memory=1Gi`, recreate the sandbox and
+run `./demo.sh limits memory`. Where does the process get stopped now? Does a
+review still work on the smaller machine?
+
+**9. Swap the model (no new sandbox needed).** List the models your key can use:
+
+```bash
+set -a; . ./.env; set +a
+curl -s "https://$endpoint/v1/models" -H "Authorization: Bearer $api_key" | jq -r '.data[].id'
+```
+
+Set `model_id=` in `.env` to a different one and run the same review again.
+Which model found more? Which was faster?
+
+**Tip:** `./demo.sh logs` replays your last session in full, which is handy for
+comparing runs side by side with a neighbour.
+
+## Step 9: Delete your sandbox (1 min)
+
+```bash
+./demo.sh down
+```
+
+The whole machine, and everything the agent installed and ran, is gone.
+**Please don't skip this:** sandboxes keep running (and costing) until deleted.
