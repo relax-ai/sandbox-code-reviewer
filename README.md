@@ -80,8 +80,9 @@ This makes one API call (`POST /v1/sandboxes`) to create your own sandbox:
   4 GiB of memory and 5 GiB of disk. It gets its own name, like
   `relaxai-workshop-3fa9c2`, and deletes itself after 4 hours if you forget.
 - **Limited internet access:** it can only reach an allowlist of hosts: the
-  relaxAI API (for the AI model), GitHub (to fetch the PRs) and package
-  registries such as npm. Everything else is blocked.
+  relaxAI API (for the AI model), GitHub (to fetch the PRs) and the npm
+  registry (to install the agent). Everything else is blocked, including other
+  package registries.
 - **The AI agent:** the script then uploads [prompt.txt](prompt.txt) and
   installs Claude Code inside the sandbox, set up to use a model served by
   relaxAI with your key.
@@ -103,7 +104,7 @@ Look for three things:
 - **tools:** a Node, git and Claude Code version.
 - **model:** `OK: Hello!` (or another greeting). The agent can reach the AI model.
 - **network policy:** the hosts your sandbox is **allowed** to reach (the
-  relaxAI API, GitHub and package registries), and that **every other host is
+  relaxAI API, GitHub and the npm registry), and that **every other host is
   denied**. The green check underneath confirms it: an allowed host was
   reached and a denied one was blocked.
 
@@ -244,8 +245,7 @@ EOF
 ./demo.sh review 1
 ```
 
-**2. Fix it.** The agent edits its own copy of the code in the sandbox and
-proves the fix works.
+**2. Fix it.** The agent edits its own copy of the code in the sandbox and proves the fix works.
 
 ```bash
 cat >> prompt.txt <<'EOF'
@@ -309,7 +309,7 @@ recreate it (about 2 minutes):
 `allowed_hosts=` line with this (the default list, plus Wikipedia at the end):
 
 ```ini
-allowed_hosts=api.beta.relax.ai,github.com,api.github.com,codeload.github.com,objects.githubusercontent.com,raw.githubusercontent.com,www.wikipedia.org
+allowed_hosts=api.beta.relax.ai,github.com,api.github.com,codeload.github.com,objects.githubusercontent.com,raw.githubusercontent.com,registry.npmjs.org,www.wikipedia.org
 ```
 
 Recreate the sandbox, then run `./demo.sh limits network`: Wikipedia is now

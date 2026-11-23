@@ -29,7 +29,10 @@ BASE="$ORIGIN/v1"
 AUTH="Authorization: Bearer ${api_key}"
 RETRY=(--retry 3 --retry-delay 2 --retry-all-errors)
 MODEL="${model_id:-DeepSeek-V41-Flash}"
-ALLOWED="${allowed_hosts:-$API_HOST,github.com,api.github.com,codeload.github.com,objects.githubusercontent.com,raw.githubusercontent.com}"
+# Only what the demo needs: the relaxAI API, GitHub (the demo repo) and the npm
+# registry (bootstrap.sh installs Claude Code from it). Every other host,
+# including other package registries, is denied.
+ALLOWED="${allowed_hosts:-$API_HOST,github.com,api.github.com,codeload.github.com,objects.githubusercontent.com,raw.githubusercontent.com,registry.npmjs.org}"
 # Shared in-sandbox helper: prints REACHED or BLOCKED for a URL.
 PROBE='probe(){ c=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "$1"); [ "$c" = 000 ] && echo "BLOCKED  $1" || echo "REACHED  $1 (http $c)"; }; '
 
@@ -68,7 +71,7 @@ upload()   { curl "${RETRY[@]}" --max-time 60 -fsS -X POST "$BASE/sandboxes/$ID/
 
 networking_json() { # networking_json limited|unrestricted
   if [ "$1" = limited ]; then
-    jq -nc --arg h "$ALLOWED" '{type:"limited", allow_package_managers:true, allowed_hosts:($h|split(","))}'
+    jq -nc --arg h "$ALLOWED" '{type:"limited", allow_package_managers:false, allowed_hosts:($h|split(","))}'
   else
     echo '{"type":"unrestricted"}'
   fi
@@ -168,7 +171,6 @@ do_verify() {
   say "--- network policy (limited) ---"
   echo "Allowed:"
   tr ',' '\n' <<<"$ALLOWED" | sed 's/^/  /'
-  echo "  + package registries (npm, PyPI, crates.io, RubyGems, Go, Docker Hub, Maven, NuGet)"
   echo "Denied:"
   echo "  every other host"
   # Prove the policy is in force: one allowed host and one denied host.
@@ -346,7 +348,7 @@ do_limits() {
   local which="${1:-all}"
   if [ "$which" = all ] || [ "$which" = network ]; then
     say "== Network: only allowlisted hosts are reachable"
-    exec_show "$PROBE echo 'on the default allowlist:'; probe https://api.github.com; probe https://registry.npmjs.org; echo; echo 'not on the default allowlist:'; probe https://example.com; probe https://www.wikipedia.org"
+    exec_show "$PROBE echo 'on the default allowlist:'; probe https://api.github.com; probe https://registry.npmjs.org; echo; echo 'not on the default allowlist:'; probe https://example.com; probe https://www.wikipedia.org; probe https://pypi.org"
     echo
   fi
   if [ "$which" = all ] || [ "$which" = memory ]; then

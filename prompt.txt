@@ -8,7 +8,7 @@ Inputs:
 
 About the sandbox:
   - It is thrown away after the run, so installing and running the code is safe.
-  - Its egress policy only allows GitHub, package registries and the model API.
+  - Its egress policy only allows GitHub, the npm registry and the model API.
     Every other host is blocked by the sandbox. If the code tries to reach
     another host, that is a finding: say "<host> was blocked by the sandbox's
     egress policy" and show the failing output as evidence. Don't guess
